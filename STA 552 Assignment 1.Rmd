@@ -41,7 +41,7 @@ knitr::opts_chunk$set(warning=FALSE, message=FALSE)
   + Source: Kaggle
   + *Missing Values* : Below are the missing values from both categorical and numeric variables from the dataset.
 ```{r}
-df <- read.csv("C:/Users/agaja/Downloads/STA 552/Data.csv", header = TRUE, stringsAsFactors = FALSE)
+df <- read.csv("https://bhavana-dotcom.github.io/Assignments/Data.csv", header = TRUE, stringsAsFactors = FALSE)
 
 library(dplyr)
 library(tidyr)
