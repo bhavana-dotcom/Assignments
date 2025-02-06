@@ -1,0 +1,232 @@
+---
+title: "Loan Default Prediction for Financial Risk Management"
+author: "Bhavana Kappala"
+date: "2025-02-01"
+output:
+  html_document: 
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+    number_sections: no
+    toc_collapsed: yes
+    code_folding: hide
+    code_download: yes
+    smooth_scroll: yes
+    theme: lumen
+  word_document: 
+    toc: yes
+    toc_depth: 4
+    fig_caption: yes
+    keep_md: yes
+  pdf_document: 
+    toc: yes
+    toc_depth: 4
+    fig_caption: yes
+    number_sections: no
+    fig_width: 3
+    fig_height: 3
+editor_options: 
+  chunk_output_type: inline
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning=FALSE, message=FALSE)
+
+```
+## 1.Working Dataset
+* **Data Size and Feature Variables: **
+  + Data Size= 1000 Observations
+  + The dataset used in this project consists of 15 feature variables of which two are categorical and 13 are numeric.
+  + Source: Kaggle
+  + *Missing Values* : Below are the missing values from both categorical and numeric variables from the dataset.
+```{r}
+df <- read.csv("C:/Users/agaja/Downloads/STA 552/Data.csv", header = TRUE, stringsAsFactors = FALSE)
+
+library(dplyr)
+library(tidyr)
+# Function to count missing values in character variables, including empty cells
+
+# Function to count missing values in all variables
+count_missing_values <- function(data) {
+  data %>%
+    mutate(across(where(is.character), ~ na_if(., ""))) %>%
+    summarise_all(~ sum(is.na(.))) %>%
+    pivot_longer(everything(), names_to = "variable", values_to = "missing_count")
+}
+# Use the function
+missing_values <- count_missing_values(df)
+print(missing_values)
+```
+
+  
+## 2. Introduction
+
+* **Description of Data**
+  + *Purpose of Data Collection* -  This dataset is collected to analyze factors influencing loan defaults. It is intended for predictive modeling to assess the risk of default based on various customer attributes. The insights from this dataset can aid financial institutions in making informed lending decisions and mitigating risk.
+  
+  + *Description of the Data Collection or Generation Process* - The data was gathered from banking records, customer financial details, and loan application histories. The dataset includes various financial attributes, demographic details, and loan-related information. It has been preprocessed to ensure consistency and usability for analysis. The dataset contains 1,000 records and 16 columns.
+  
+  + *Sample Size and Number of Feature Variables* - 
+  Total Sample Size: 1,000 records
+  Number of Feature Variables: 15 (excluding the target variable "Default")
+
+  + *Itemized List of Feature Variables* - 
+  
+1.	Default (int, target variable) – Indicates whether a customer defaulted on a loan (0 = No, 1 = Yes).
+2.	Checking_amount (float) – Balance in the customer's checking account.
+3.	Term (int) – Loan term in months.
+4.	Credit_score (int) – Customer's credit score.
+5.	Gender (categorical) – Gender of the customer (Male/Female).
+6.	Marital_status (categorical) – Customer's marital status (Single, Married, etc.).
+7.	Car_loan (int, boolean) – Whether the customer has a car loan (0 = No, 1 = Yes).
+8.	Personal_loan (int, boolean) – Whether the customer has a personal loan.
+9.	Home_loan (int, boolean) – Whether the customer has a home loan.
+10.	Education_loan (int, boolean) – Whether the customer has an education loan.
+11.	Emp_status (categorical) – Employment status (e.g., employed, unemployed).
+12.	Amount (int) – Loan amount requested.
+13.	Saving_amount (int) – Savings account balance.
+14.	Emp_duration (int) – Employment duration in months.
+15.	Age (int) – Age of the customer.
+16.	No_of_credit_acc (int) – Number of credits accounts the customer holds.
+
+
+* **Purposes of Using This Data Set**
+  + Predictive Modeling: Develop machine learning models to predict loan defaults.
+  + Risk Analysis: Identify high-risk customers based on financial and demographic attributes.
+  + Customer Profiling: Understand borrower characteristics that influence loan repayment behavior.
+Problem Statements: Develop a predictive model to assess the likelihood of a customer defaulting on a loan based on their financial history, credit score, and demographic details.
+
+
+## 3. Distribution of Individual Features
+
++ Variables such as Checking amount & Marital Status require additional processing and imputation as there are missing values.
+* **Observations**
+Checking_amount and Marital_status have missing values (8 instances each).
+Missing values in Checking_amount may indicate that some individuals do not have an active checking account or that data collection was incomplete.
+Missing values in Marital_status could arise due to non-disclosure or data entry issues.
+There is a possibility of missing values being non-random (e.g., missing Checking_amount could correlate with financial instability, impacting default predictions).
+
+* **Implications**
++ If the missing values are not handled properly, it could bias the analysis and affect machine learning models that require complete data.
++ For Checking_amount: If missing values are associated with individuals having no checking account, replacing them with a specific category like "No Account" might improve model interpretability.
++ For Marital_status: If the missing values are random, imputation using the mode (Most Common Category) would help maintain data consistency. However, if the missing values are systematic, a separate "Unknown" category may be necessary to capture its predictive effect.
++ Ignoring these missing values or applying improper imputation could lead to data leakage or incorrect patterns during model training.
+
+* **Analytical Actions**
++ For Checking_amount:Replace missing values with "No Account" if it aligns with domain knowledge.
++ Alternatively, use mode imputation (most common category).
++ For Marital_status:Use mode imputation (Single, Married, or other most frequent value).
++ If missing values have a potential pattern, introduce an "Unknown" category.
++ Exploratory Data Analysis (EDA):Conduct statistical tests (e.g., Chi-square test) to check if missing values correlate with the target variable (Default).
++ Visualize distributions before and after imputation to assess impact.
+
+## 4. Relationship between Features
+
+* **Relationship Between Features**
+
+This section explores relationships between key feature variables in the dataset, using appropriate visualizations to identify trends, correlations, and patterns. Understanding these relationships is essential for feature selection, engineering, and model development. We analyze:
+
++ Relationships between two numerical features using scatter plots and correlation matrices.
+The scatter plot illustrates the relationship between Credit Score (x-axis) and Amount (y-axis). Here’s a summary of the observed trends:
+
+Range of Credit Scores: The data spans credit scores approximately from 400 to 1000.
+Range of Amounts: The amounts vary from around 0 to 2500.
+Distribution:
+The data points are concentrated primarily in the middle range of credit scores (600–850) and amounts (500–1500).
+There is no clear linear correlation; instead, the data shows a diffuse, somewhat circular or elliptical pattern.
+Outliers: There are outliers present, with some extreme values of amounts (>2000) and some at lower credit scores.
+Conclusion:
+The relationship between Credit Score and Amount appears to be weak or nonexistent, as there is no discernible trend or pattern.
+  
+```{r}
+library(ggplot2)
+library(GGally)
+
+
+```
+```{r}
+# Scatter plot using ggplot2
+ggplot(df, aes(x=Credit_score, y=Amount)) +
+  geom_point(color="blue", alpha=0.5) +
+  ggtitle("Credit Score vs Amount") +
+  xlab("Credit Score") +
+  ylab("Amount")
+
+```
+Loading the dataset 
+```{r}
+
+df <- read.csv("C:/Users/agaja/Downloads/STA 552/Data.csv", stringsAsFactors = TRUE)
+
+# Convert necessary columns to numeric (if needed)
+df$Credit_score <- as.numeric(df$Credit_score)
+df$Amount <- as.numeric(df$Amount)
+df$Saving_amount <- as.numeric(df$Saving_amount)
+df$Emp_duration <- as.numeric(df$Emp_duration)
+df$Age <- as.numeric(df$Age)
+df$No_of_credit_acc <- as.numeric(df$No_of_credit_acc)
+```
+
++ Relationships between two categorical features using grouped bar charts or heatmaps.
+
+The heatmap in the image visualizes the relationship between Default (presumably a binary variable indicating whether a person defaulted on a loan) and Employment Status (categorical: employed or unemployed). The color gradient represents the frequency of observations in each category, ranging from white (low frequency) to blue (high frequency).
+
+Insights from the Heatmap:
+Higher Defaults Among Unemployed: The darkest blue area is in the unemployed category, indicating that unemployed individuals have a higher frequency of defaulting compared to employed individuals.
+Lower Defaults Among Employed: The employed category has lighter shading, implying a lower count of defaults.
+Non-Defaults More Common in Both Groups: The right-side regions of the plot (presumably representing non-default cases) are lighter in color, suggesting that more individuals (both employed and unemployed) did not default.
+This visualization suggests that unemployment might be associated with a higher likelihood of default, but a detailed statistical analysis would be required to confirm the strength of this relationship.
+
+```{r}
+library(ggplot2)
+library(dplyr)
+```
+```{r}
+heatmap_data <- df %>%
+  count(Default, Emp_status)
+
+# Heatmap: Relationship between Default and Employment Status
+ggplot(heatmap_data, aes(x = Default, y = Emp_status, fill = n)) +
+  geom_tile() +
+  labs(title = "Heatmap: Default vs Employment Status",
+       x = "Default", y = "Employment Status") +
+  scale_fill_gradient(low = "white", high = "blue") +
+  theme_minimal()
+```
+
++ Relationships between one numerical and one categorical feature using box plots.
+The box plot illustrates the relationship between Marital Status (categorical) and Credit Score (numerical).
+
+Marital Status Categories:
+
+There are at least two categories: "Married" and "Single."
+Credit Score Distribution:
+
+The median credit score is similar for both categories.
+"Married" individuals appear to have a slightly wider range of credit scores compared to "Single" individuals.
+Both categories have outliers, with a few credit scores extending below 600 and above 900.
+Variability:
+
+The interquartile range (IQR) is slightly larger for "Married" individuals, indicating more variation in their credit scores compared to "Single."
+Outliers:
+
+Outliers are observed in both categories, mostly toward the lower end (below 600) and the higher end (above 900).
+Conclusion:
+There doesn't appear to be a strong difference in the central tendency of credit scores between "Married" and "Single" individuals. However, variability in credit scores is slightly higher for "Married" individuals, with both groups exhibiting similar ranges and outliers.
+  
+```{r}
+# Required Libraries
+library(ggplot2)
+library(dplyr)
+
+# Box Plot: Relationship between Marital Status (Categorical) and Credit Score (Numerical)
+ggplot(df, aes(x = Marital_status, y = Credit_score, fill = Marital_status)) +
+  geom_boxplot() +
+  labs(title = "Box Plot: Marital Status vs Credit Score",
+       x = "Marital Status", y = "Credit Score") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set3")
+
+
+```
