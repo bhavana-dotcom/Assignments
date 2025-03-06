@@ -1,0 +1,1118 @@
+---
+title: "Loan Default Prediction for Financial Risk Management"
+author: "Bhavana Kappala"
+date: "2025-02-01"
+output:
+  html_document: 
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+    number_sections: no
+    toc_collapsed: yes
+    code_folding: hide
+    code_download: yes
+    smooth_scroll: yes
+    theme: lumen
+  word_document: 
+    toc: yes
+    toc_depth: 4
+    fig_caption: yes
+    keep_md: yes
+  pdf_document: 
+    toc: yes
+    toc_depth: 4
+    fig_caption: yes
+    number_sections: no
+    fig_width: 3
+    fig_height: 3
+editor_options: 
+  chunk_output_type: inline
+---
+
+
+
+```{=html}
+
+<style type="text/css">
+
+/* Cascading Style Sheets (CSS) is a stylesheet language used to describe the presentation of a document written in HTML or XML. it is a simple mechanism for adding style (e.g., fonts, colors, spacing) to Web documents. */
+
+h1.title {  /* Title - font specifications of the report title */
+  font-size: 22px;
+  font-weight: bold;
+  color: DarkRed;
+  text-align: center;
+  font-family: "Gill Sans", sans-serif;
+}
+h4.author { /* Header 4 - font specifications for authors  */
+  font-size: 18px;
+  font-weight: bold;
+  font-family: system-ui;
+  color: navy;
+  text-align: center;
+}
+h4.date { /* Header 4 - font specifications for the date  */
+  font-size: 18px;
+  font-family: system-ui;
+  color: DarkBlue;
+  text-align: center;
+  font-weight: bold;
+}
+h1 { /* Header 1 - font specifications for level 1 section title  */
+    font-size: 22px;
+    font-family: "Times New Roman", Times, serif;
+    color: navy;
+    text-align: center;
+    font-weight: bold;
+}
+h2 { /* Header 2 - font specifications for level 2 section title */
+    font-size: 20px;
+    font-family: "Times New Roman", Times, serif;
+    color: navy;
+    text-align: left;
+    font-weight: bold;
+}
+
+h3 { /* Header 3 - font specifications of level 3 section title  */
+    font-size: 18px;
+    font-family: "Times New Roman", Times, serif;
+    color: navy;
+    text-align: left;
+}
+
+h4 { /* Header 4 - font specifications of level 4 section title  */
+    font-size: 18px;
+    font-family: "Times New Roman", Times, serif;
+    color: darkred;
+    text-align: left;
+}
+
+body { background-color:white; }
+
+.highlightme { background-color:yellow; }
+
+p { background-color:white; }
+
+</style>
+```
+
+```{r setup, include=FALSE}
+# code chunk specifies whether the R code, warnings, and output 
+# will be included in the output files.
+if (!require("knitr")) {
+   install.packages("knitr")
+   library(knitr)
+}
+
+if (!require("htmltools")) {
+# Update the htmltools package
+install.packages("htmltools")
+library(htmltools)
+}
+
+if (!require("plotly")) {
+install.packages("plotly")
+# Load the plotly package
+library(plotly)
+}
+
+if (!require("tidyverse")) {
+   install.packages("tidyverse")
+library(tidyverse)
+}
+if (!require("VIM")) {
+install.packages("VIM")  # For KNN imputation
+library(VIM)
+}
+if (!require("caret")) {
+install.packages("caret")  # For one-hot encoding
+  library(caret)
+}
+if (!require("mice")) {
+install.packages("mice")   # For multiple imputation (optional)
+library(mice)
+}
+
+if (!require("pROC")) {
+install.packages("pROC")   # For ROC Curve
+library(pROC)
+}
+if (!require("caTools")) {
+install.packages("caTools")   # For Splitting Data
+library(caTools)
+}
+
+if (!require("ggcorrplot")) {
+install.packages("ggcorrplot")  # Install if needed
+library(ggcorrplot)
+}
+
+library(e1071)  # For skewness function
+
+## 
+knitr::opts_chunk$set(echo = TRUE,   # include code chunk in the output file
+                      warning = FALSE,# sometimes, you code may produce warning messages,
+                                      # you can choose to include the warning messages in
+                                      # the output file. 
+                      results = TRUE, # you can also decide whether to include the output
+                                      # in the output file.
+                      message = FALSE,
+                      comment = NA
+                      )  
+```
+
+## Objective:
+
+The objective of this project is to develop and evaluate a predictive logistic regression model to accurately classify loan defaults based on various financial and demographic factors. 
+The study aims to:
+
+- Identify significant predictors influencing loan default by fitting multiple logistic regression models and performing stepwise selection to refine the model.
+- Evaluate model performance using key statistical metrics, including Accuracy, Precision, Recall, F1-Score, and AUC, to ensure reliable classification of defaulters and non-defaulters.
+- Determine the optimal decision threshold by analyzing the trade-off between Precision and Recall, optimizing the F1-Score, and selecting a cut-off that minimizes classification errors.
+- Compare multiple candidate models based on cross-validation results to select the best-performing model for practical deployment.
+- Assess model generalization by applying the final selected model to a test dataset, ensuring that it maintains high predictive accuracy in real-world scenarios.
+  
+```{r include=FALSE}
+df <- read.csv("https://bhavana-dotcom.github.io/Assignments/Data.csv", header = TRUE, stringsAsFactors = FALSE)
+
+
+# Ensure correct column names
+colnames(df)[colnames(df) == "age"] <- "Age"
+colnames(df)[colnames(df) == "default"] <- "Default"
+
+# Convert Default to a factor (for logistic regression)
+df$Default <- as.factor(df$Default)
+
+# Add random missing values to the Default variable
+set.seed(123)  # Set seed for reproducibility
+missing_percentage <- 0.05  # 10% of the data will be missing
+
+# Calculate number of missing values to introduce
+num_missing <- floor(missing_percentage * nrow(df))
+
+# Randomly select indices to introduce NA values
+missing_indices <- sample(1:nrow(df), num_missing)
+
+# Introduce NAs in the Default column
+df$Default[missing_indices] <- NA
+
+# Check how many missing values were added
+print(paste("Number of missing values in Default after addition:", sum(is.na(df$Default))))
+
+# Optionally, check a sample of the data
+head(df)
+
+
+# Replace empty strings with NA
+df$Marital_status[df$Marital_status == ""] <- NA
+
+# Function to count missing values in character variables, including empty cells
+
+# Function to count missing values in all variables
+count_missing_values <- function(data) {
+  data %>%
+    mutate(across(where(is.character), ~ na_if(., ""))) %>%
+    summarise_all(~ sum(is.na(.))) %>%
+    pivot_longer(everything(), names_to = "variable", values_to = "missing_count")
+}
+# Use the function
+missing_values <- count_missing_values(df)
+
+print(missing_values)
+```
+
+## Missing Value Imputation:
+
+This section focuses on imputing missing values in the data set. Marital_status and Amount are the two variables with missing values that need imputation to not lose out on important information. We consider missing value imputation methods like mode imputation and KNN algorithm to deal with missing data.
+
+Checking_amount and Marital_status have missing values (8 instances each).Missing values in Checking_amount may indicate that some individuals do not have an active checking account or that data collection was incomplete. Missing values in Marital_status could arise due to non-disclosure or data entry issues. There is a possibility of missing values being non-random (e.g., missing Checking_amount could correlate with financial instability, impacting default predictions).
+
+If the missing values are not handled properly, it could bias the analysis and affect machine learning models that require complete data.Ignoring these missing values or applying improper imputation could lead to data leakage or incorrect patterns during model training.
+
+
+## Replacement Imputation for Categorical Features:
+
+Two possible replacement methods we can consider for imputing missing values:
+
++ Replace missing values in categorical features with the mode of the corresponding variable.
+
+```{r}
+
+
+# Compute mode
+mode_value <- df %>% 
+  count(Marital_status, sort = TRUE) %>% 
+  slice(1) %>% 
+  pull(Marital_status)
+
+# Impute missing values
+df$Marital_status[is.na(df$Marital_status)] <- mode_value
+
+#Check
+df %>%
+  count(Marital_status, sort = TRUE) %>%
+  print()
+
+#print(sum(is.na(df$Marital_status)))
+
+```
+
++ Use the k-nearest neighbors (KNN) algorithm to impute missing values by assigning the value most common among the k-nearest neighbors surrounding the point with the missing data.
+
+
+
+```{r}
+# Perform KNN imputation after normalization and dummy encoding
+df <- kNN(df, variable = "Marital_status", k = 15)
+
+# Verify imputation
+sum(is.na(df$Marital_status))
+table(df$Marital_status, useNA = "ifany")
+
+
+```
+## Regression-based Imputation for Numerical Features:
+
+Highly correlated features (either positively or negatively) can be used to estimate missing values through regression-based imputation or predictive modeling. In the given correlation matrix, variables like "Checking_amount" and "Default" show strong relationships, suggesting that missing values in one could be estimated using the other. Additionally, if multiple features are moderately correlated, a multivariate imputation technique, such as multiple imputation or k-nearest neighbors (KNN), could provide more accurate estimates.
+
+```{r}
+df_num <- df
+df_num$Default <- as.numeric(as.factor(df_num$Default))
+
+
+numeric_features <- df %>% select_if(is.numeric)
+
+
+# Compute correlation matrix
+cor_matrix <- cor(numeric_features, use = "complete.obs")
+
+# Plot heatmap
+ggcorrplot(cor_matrix, method = "circle", type = "lower", lab = TRUE)
+
+```
+ 
+ In the given plot, random regression imputation has been applied to predict missing values for the "Default" variable based on "Age." The original data points (red) are compared with the imputed values (blue), illustrating how the regression model fills in missing entries while maintaining the overall data distribution. This approach is beneficial when there is a strong correlation between variables, ensuring more accurate and meaningful imputations.
+
+
+```{r}
+
+# Create a new dataset with the imputed values (keeping original intact)
+new_df <- df  # Copy the original dataset
+
+z <- df$Age
+y <- as.numeric(as.character(df$Default)) # Ensures 0 and 1 levels
+
+# Split into observed and missing data
+workSet <- df[!is.na(y) & !is.na(z), c("Default", "Age")]
+
+newdata <- df[is.na(y), c("Age"), drop = FALSE]
+
+workSet$Default <- as.numeric(as.character(workSet$Default))   # Converts to 0 and 1
+new_df$Default <- as.numeric(as.character(new_df$Default))   # Converts to 0 and 1
+# Fit logistic regression model
+logit.mdl <- glm(Default ~ Age, data = workSet, family = binomial)
+# Predict missing Default values
+pred.y <- predict(logit.mdl, newdata = newdata, type = "response")
+
+# Add random residual error to account for variability
+set.seed(123)  # Ensure reproducibility
+pred.resid <- rnorm(length(pred.y), mean = 0, sd = sd(residuals(logit.mdl)))
+pred.y_rand <- pred.y + pred.resid  # Introduce variability
+
+# Convert probabilities to binary classification
+pred.y_bin <- ifelse(pred.y > 0.5, 1, 0)  # Regular regression imputation
+pred.y_rand_bin <- ifelse(pred.y_rand > 0.5, 1, 0)  # Randomized regression imputation
+new_df$Default[is.na(new_df$Default)] <- pred.y_rand_bin  # Impute into the new dataset
+
+# Plot original data (default plotting color)
+plot(workSet$Age, workSet$Default, main = "Random Regression Imputation",
+     xlab = "Age", ylab = "Default (0/1)", col = "red", pch = 19)
+
+# Plot Random regression imputation (blue points)
+points(newdata$Age, pred.y_rand_bin, col = "blue", pch = 19)  # Random regression imputation in blue
+
+# Add legend
+legend("topleft", legend = c("Original Data", "Random Regression Imputation"),
+       col = c("red", "blue"), pch = 19, bty = "n", cex = 0.8)
+new_df$Default <- factor(new_df$Default)
+
+# Check the new dataset with imputed values
+summary(new_df$Default)
+#summary(df$Default)
+# Use the function
+missing_values <- count_missing_values(new_df)
+print(missing_values)
+
+```
+## MICE:
+
+The displayed results are from a linear regression model used within the Multiple Imputation by Chained Equations (MICE) framework. MICE is an iterative method that imputes missing values by modeling relationships between variables. In this case, the model predicts missing values using Age as a predictor.
+
+The strong statistical significance of Age suggests it is a crucial predictor in the imputation process. The negative coefficient implies that as Age increases, the imputed values decrease. These results confirm that MICE effectively captures the relationship between variables, ensuring more accurate imputations for missing data.
+
+
+```{r}
+
+
+init <- mice(df, maxit = 0)  # Check initial imputation setup
+methods <- init$method       # Extract the method template
+methods["Default"] <- "logreg"  # Use logistic regression for binary variable
+methods["Age"] <- "pmm"         # Predictive mean matching for Age (numeric)
+
+imp <- mice(df, method = methods, maxit = 10, m = 7, print = FALSE)  
+
+imp_data <- complete(imp, action = 1L)[1:1000,]  # The default *action = 1L* returns the first
+head(imp_data)
+plot(imp)
+
+
+# Function to count missing values in all variables
+count_missing_values <- function(data) {
+  data %>%
+    mutate(across(where(is.character), ~ na_if(., ""))) %>%
+    summarise_all(~ sum(is.na(.))) %>%
+    pivot_longer(everything(), names_to = "variable", values_to = "missing_count")
+}
+# Use the function
+missing_values <- count_missing_values(imp_data)
+print(missing_values)
+
+model_3 <- with(imp, glm(Default ~ Age, family = binomial))  # The statistical model to assess
+                                             # the relationship between *Ozone*
+                                             # and *Wind* and *Temp*.
+summary.stats = summary(model_3)               # display the regression results of 
+                                             # individual imputed data set.
+#summary.stats 
+summary(pool(model_3))
+
+```
+
+
+## Checking for Skewness:
+
+No of Credit Accounts is one of the highly skewed variables in the dataset. Skewness is identified using skewness function on all numeric features of the dataset. 
+
+```{r include=FALSE} 
+missing_values_new <- count_missing_values(imp_data)
+print(missing_values_new)
+```
+
+```{r}
+
+
+df$Checking_amount <- as.numeric(df$Checking_amount)
+df$Amount <- as.numeric(df$Amount)
+df$Saving_amount <-as.numeric(df$Saving_amount)
+#library(e1071)  # For skewness function
+#library(ggplot2)  # For visualization
+
+# Select only numeric columns
+numeric_vars <- df[, sapply(df, is.numeric)]
+# Compute skewness for each numeric variable
+skewness_values <- sapply(numeric_vars, skewness, na.rm = TRUE)
+
+# Identify highly skewed variables
+skewed_vars <- names(skewness_values[abs(skewness_values) > 1])
+
+# Print results
+print("Skewness values:")
+print(skewness_values)
+print("Highly skewed variables:")
+print(skewed_vars)
+# Create a histogram for Skewed Numeric Variable - No of Credit Accounts
+hist(numeric_vars$No_of_credit_acc, 
+     main = "Histogram of No of Credit Accounts", 
+     xlab = "No of Credit Accounts", 
+     col = "lightblue", 
+     breaks = 30)
+
+
+```
+
+## Feature Transformation: 
+The below R code preprocesses data and builds logistic regression models to predict Default (a binary outcome). It begins with feature scaling, where normalization scales No_of_credit_acc between 0 and 1, standardization transforms it to have a mean of 0 and standard deviation of 1, and a log transformation (log(x+1)) reduces skewness. Categorical variables such as Gender, Marital_status, and Emp_status are then converted into factors for proper model interpretation.
+
+```{r}
+
+# Normalization
+normalize <- function(x) {
+  return((x - min(x)) / (max(x) - min(x)))
+}
+df$No_CreditAcc_normalized <- normalize(df$No_of_credit_acc)
+
+# Standardization
+standardize <- function(x) {
+  return((x - mean(x)) / sd(x))
+}
+df$No_CreditAcc_standardized <- standardize(df$No_of_credit_acc)
+df$No_of_credit_acc_transformed <- log(df$No_of_credit_acc + 1)  # Log transformation
+
+df$Gender <- as.factor(df$Gender)
+df$Marital_status <- as.factor(df$Marital_status)
+df$Emp_status <- as.factor(df$Emp_status)
+
+new_df <- df[, c("Default","Checking_amount","Term",	"Credit_score"	,"Gender",	"Marital_status" ,	"Car_loan",	"Personal_loan",	"Home_loan",	"Education_loan",	"Emp_status",	"Amount",	"Saving_amount",	"Emp_duration", 	"Age",	"No_of_credit_acc_transformed" )]
+
+str(new_df)
+#full_model <- glm(Default ~ ., data = new_df, family = binomial)  
+#summary(full_model)
+
+#final_model <- glm(Default ~ Checking_amount+Term+Credit_score+Age, data = new_df, family = binomial )
+#summary(final_model)
+
+```
+
+## Principal Component Analysis:
+The images and R code illustrate a Principal Component Analysis (PCA) performed on a preprocessed dataset. Categorical variables were converted to numeric using one-hot encoding, missing values were handled, and data was standardized before applying PCA. The Scree Plot shows the variance explained by each component, helping determine the optimal number of principal components. The scatter plot of the first two principal components visualizes the data distribution, revealing potential clusters or patterns. This analysis helps reduce dimensionality while preserving key information in the dataset.
+
+Based on our scree plot and variance explained by various principal components, it is observed that PC01 and PC02 explain about 37% of total variability, suggesting that dimensionality cannot be reduced effectively without losing much information based on recommended 70-80%. Clustered components on the scatter plot suggest that the underlying structure is well captured by the principal component analysis. 
+
+PC3 and PC4 explain around 8% each, while the following components (PC5 to PC20) explain progressively less (below 1%).
+PCs with very small contributions (like PC18, PC19, and beyond) are likely capturing noise rather than meaningful structure, and these components can usually be discarded without significantly affecting the data.
+
+Based on our Scree Plot, it would be beneficial to retain PC1, PC2, PC3, PC4, PC5, PC6 and PC7 which explains about 74% of total variance.
+
+
+```{r}
+
+# Step 1: Convert categorical variables to numeric using one-hot encoding
+df_numeric <- df %>%
+ mutate(across(c(Gender, Marital_status, Emp_status), as.factor)) %>%  # Convert to factors
+   dummyVars(~ ., data = .) %>%      
+  predict(newdata = df) %>% 
+   as.data.frame()
+ 
+ # Step 2: Select only numeric features
+ numeric_data <- df_numeric %>% select_if(is.numeric)
+ 
+ # Step 3: Handle missing and infinite values
+ numeric_data[is.na(numeric_data)] <- 0   # Replace NAs with 0 (or use median imputation)
+ 
+ constant_cols <- apply(numeric_data, 2, function(col) var(col, na.rm = TRUE) == 0)
+numeric_data <- numeric_data[, !constant_cols]
+
+ 
+ # Step 4: Standardize the data (only after handling missing values)
+ scaled_data <- scale(numeric_data)
+ 
+ # Step 5: Perform PCA
+ pca_result <- prcomp(scaled_data, center = TRUE, scale = TRUE)
+ 
+ summary(pca_result)
+ 
+ # Step 6: Scree Plot (to decide number of components to keep)
+ screeplot(pca_result, type = "lines", main = "Scree Plot")
+ 
+ # Step 7: Biplot (PCA visualization)
+# biplot(pca_result, scale = 0)
+ 
+ # Step 8: Scatter plot of first two principal components
+ pca_df <- as.data.frame(pca_result$x)
+ ggplot(pca_df, aes(x = PC1, y = PC2)) +
+   geom_point(size = 3, alpha = 0.7, color = "blue") +
+ labs(title = "PCA - First Two Principal Components") +
+   theme_minimal()
+ 
+#variance_explained <- summary(pca_result)$importance[2, ]  # Extract proportion of variance explained
+#pca_result$rotation
+#reduced_data <- pca_result$x[, 1:7]
+#reduced_data <- cbind(reduced_data, Target = df$Default)
+#cor(pca_result$x)
+
+#summary(reduced_data)
+
+```
+
+
+## Candidate model selection through Regression Analysis (Stepwise feature Selection(backward & forward) and glm)
+
+*Working Data Set and Practical Question:*
+
+The final dataset was generated using the Multiple Imputation by Chained Equations (MICE) procedure, a statistical method employed to handle missing data in a comprehensive and robust manner. The resulting final dataset is one in which missing values are replaced with plausible estimates, ensuring that the dataset can be used for further analysis without introducing significant bias, while preserving the inherent variability in the data
+
+```{r include=FALSE}
+ 
+# Load the data
+imp_data$Gender <- as.factor(imp_data$Gender) # Convert to factor for logistic regression
+imp_data$Marital_status <- as.factor(imp_data$Marital_status) # Convert to factor for logistic regression
+imp_data$Emp_status <- as.factor(imp_data$Emp_status) # Convert to factor for logistic regression
+imp_data$Car_loan <- as.factor(imp_data$Car_loan)
+imp_data$Personal_loan <- as.factor(imp_data$Personal_loan)
+imp_data$Home_loan <- as.factor(imp_data$Home_loan)
+imp_data$Education_loan <- as.factor(imp_data$Education_loan)
+
+# Fit a logistic regression model
+model_glm <- glm(Default ~., family = binomial, data = imp_data)
+model_summary <- summary(model_glm)
+#--------------------
+model_glm_sig <- glm(Default ~ (Checking_amount+Term+Credit_score+Saving_amount+Age), family = binomial, data = imp_data)
+print(summary(model_glm_sig))
+#----------------------
+model_glm_int<-glm(Default ~ .^2, family = binomial, data = imp_data) # Non-significant p values in most interactions
+
+#------------------
+# Extract coefficients and p-values
+coef_table <- as.data.frame(model_summary$coefficients)
+
+# Filter variables with p-value < 0.05
+significant_vars <- coef_table[coef_table$`Pr(>|z|)` < 0.05, ]
+
+# Print significant variables
+print(significant_vars)
+
+# Predicted probabilities
+pred_probs <- predict(model_glm_sig, type = "response")
+
+#-------------------------- ROC Curve
+
+# ROC curve
+roc_curve <- roc(imp_data$Default, pred_probs)
+
+# Plot ROC curve
+plot(roc_curve)
+
+# AUC
+auc(roc_curve)
+
+#----------------------------- Finding Optimal cutoff from ROC Curve
+
+# Get optimal cutoff
+optimal_cutoff <- coords(roc_curve, "best", ret = "threshold")
+
+# View the optimal cutoff
+print(optimal_cutoff)
+
+#------------ Confusion matrix
+
+# Predicted labels (using optimal cutoff)
+pred_labels <- ifelse(pred_probs > 0.2984, 1, 0)
+print(confusionMatrix(factor(pred_labels), factor(imp_data$Default)))
+
+
+#--------------------------- Troubleshooting -----------------><
+#str(imp_data)
+#print(imp_data$Home_loan)
+#colSums(is.na(imp_data))
+#missing_values_new <- count_missing_values(df_num)
+#print(missing_values_new)
+
+
+```
+
+```{r include=FALSE}
+
+#-------- Backward Elimination ---------------------------*
+
+# Fit an initial model (using all predictors)
+model_full <- glm(Default ~ .,family = binomial, data = imp_data)
+
+# Perform backward step wise selection
+model_backward <- step(model_full, direction = "backward")
+
+# Show the summary of the final model
+back_model_summary<-summary(model_backward)
+
+#------------------
+# Extract coefficients and p-values
+coef_table <- as.data.frame(back_model_summary$coefficients)
+
+# Filter variables with p-value < 0.05
+significant_vars <- coef_table[coef_table$`Pr(>|z|)` < 0.05, ]
+
+# Print significant variables
+print(significant_vars)
+
+```
+```{r include=FALSE}
+
+#-------- Backward Elimination ---------------------------*
+
+# Fit an initial model (using all predictors)
+model <- glm(Default ~ Checking_amount + Credit_score + Car_loan + Education_loan + Saving_amount + Age ,family = binomial, data = imp_data)
+
+# Perform backward step wise selection
+model_backward <- step(model, direction = "backward")
+
+# Show the summary of the final model
+back_model_summary<-summary(model_backward)
+
+#------------------
+# Extract coefficients and p-values
+coef_table <- as.data.frame(back_model_summary$coefficients)
+
+# Filter variables with p-value < 0.05
+significant_vars <- coef_table[coef_table$`Pr(>|z|)` < 0.05, ]
+
+# Print significant variables
+print(significant_vars)
+
+```
+
+```{r include=FALSE}
+
+#-------- Backward Elimination ---------------------------*
+
+# Fit an initial model (using all predictors)
+model <- glm(Default ~ Age + Saving_amount + Credit_score + Checking_amount + Education_loan, family = binomial, data = imp_data)
+
+# Perform backward step wise selection
+model_backward <- step(model, direction = "backward")
+
+# Show the summary of the final model
+back_model_summary<-summary(model)
+
+#------------------
+# Extract coefficients and p-values
+coef_table <- as.data.frame(back_model_summary$coefficients)
+
+# Filter variables with p-value < 0.05
+significant_vars <- coef_table[coef_table$`Pr(>|z|)` < 0.05, ]
+
+# Print significant variables
+print(significant_vars)
+
+```
+
+
+
+
+
+```{r include=FALSE}
+
+#-------- Backward Elimination ---------------------------*
+
+# Fit an initial model (using all predictors)
+model <- glm(Default ~ (Age + Saving_amount + Checking_amount + Education_loan ), family = binomial, data = imp_data)
+
+# Perform backward step wise selection
+model_backward <- step(model, direction = "backward")
+
+# Show the summary of the final model
+back_model_summary<-summary(model_backward)
+
+#------------------
+# Extract coefficients and p-values
+coef_table <- as.data.frame(back_model_summary$coefficients)
+
+# Filter variables with p-value < 0.05
+significant_vars <- coef_table[coef_table$`Pr(>|z|)` < 0.05, ]
+
+# Print significant variables
+print(significant_vars)
+
+```
+
+```{r include=FALSE}
+
+#----------------------------- Forward Selection -------------------*
+
+# Fit an initial null model (using no predictors)
+model_null <- glm(Default ~ 1, family = binomial, data = imp_data)
+
+# Perform forward stepwise selection
+model_forward <- step(model_null, direction = "forward", scope = formula(model_full))
+
+# Show the summary of the final model
+forw_model_summary <- summary(model_forward)
+
+
+#------------------
+# Extract coefficients and p-values
+coef_table <- as.data.frame(forw_model_summary$coefficients)
+
+# Filter variables with p-value < 0.05
+significant_vars <- coef_table[coef_table$`Pr(>|z|)` < 0.05, ]
+
+# Print significant variables
+print(significant_vars)
+
+```
+
+```{r include=FALSE}
+
+# Perform stepwise selection in both directions with interactions
+M_both <- step(model_full, direction = "both")
+
+# Summarize the final model
+summary(M_both)
+
+```
+
+
+*Data Splitting:* Final Dataset imp_data has been split into training, validation and testing datasets. 
+
+```{r}
+
+# Assuming imp_data is your full dataset
+set.seed(123)  # For reproducibility
+
+# Split the data into training (70%), test (30%)
+train.ID = sample(1:dim(imp_data)[1], 0.8 * dim(imp_data)[1], replace = FALSE)
+train_data = imp_data[train.ID, ]
+test_set = imp_data[-train.ID, ]
+
+
+# Step 3: Check the size of each set to ensure the data has been split correctly
+cat("Training data size:", nrow(train_data), "\n")
+cat("Test data size:", nrow(test_set), "\n")
+
+```
+
+## Model Selection via 10-fold Cross-Validation:
+
+*Model 1 : Default = Checking_amount + Term + Credit_score + Car_loan + Personal_loan1 + Home_loan + Saving_amount + Age*
+
+*Model 2 : Default = Age + Saving_amount + Checking_amount + Credit_score + Home_loan + Term + Personal_loan + Education_loan*
+
+*Model 3 : Default = Includes Checking Amount, Age, Term, Credit Score, Saving Amount *
+
+*Model 4 : Default = Checking_amount + Credit_score + Car_loan + Education_loan + Saving_amount + Age*
+
+*Model 5 : Default = Age + Saving_amount + Checking_amount + Education_loan *
+
+*Model 6 : Default = Age + Saving_amount + Credit_score + Checking_amount + Education_loan*
+
+
+Six candidate models were evaluated, each developed using a different subset of predictors. The models were evaluated based on their AUC (Area Under the Curve), Precision, Recall, and F1-Score to assess their ability to accurately predict loan defaults.
+
+The performance of six candidate models was evaluated using AUC, Precision, Recall, and F1-Score. Model 1 and Model 2 showed the highest AUC values of 0.9819, indicating strong discriminatory power in distinguishing between default and non-default classes. These models also achieved high Precision (0.8897) and Recall (0.9927), highlighting their ability to accurately predict defaults while minimizing false positives. Model 3, with an AUC of 0.9814, had the highest Recall (0.9964), indicating it captured nearly all actual defaults, although its Precision (0.8751) was slightly lower. Model 6 had a slightly lower AUC (0.9802) but maintained a competitive F1-Score of 0.9324, suggesting a good balance between Precision (0.8798) and Recall (0.9926). Model 5 had the lowest AUC (0.9731) and Precision (0.8524), indicating it was less effective at distinguishing defaults but still performed reasonably well in recall and F1-Score. Overall, Models 1 and 2 emerged as the best performers based on the combination of high AUC, Precision, and Recall.
+
+```{r}
+# Define number of folds for cross-validation (10-fold)
+k = 10
+
+# Initialize vectors to store AUC, Precision, Recall, and F1-Score for each model
+AUC.m1 = NULL
+AUC.m2 = NULL
+AUC.m3 = NULL
+AUC.m4 = NULL
+AUC.m5 = NULL
+AUC.m6 = NULL
+
+
+precision.m1 = NULL
+precision.m2 = NULL
+precision.m3 = NULL
+precision.m4 = NULL
+precision.m5 = NULL
+precision.m6 = NULL
+
+
+recall.m1 = NULL
+recall.m2 = NULL
+recall.m3 = NULL
+recall.m4 = NULL
+recall.m5 = NULL
+recall.m6 = NULL
+
+f1.m1 = NULL
+f1.m2 = NULL
+f1.m3 = NULL
+f1.m4 = NULL
+f1.m5 = NULL
+f1.m6 = NULL
+
+# Define the thresholds you want to test (e.g., from 0.1 to 0.9)
+thresholds = seq(0.1, 0.9, by = 0.05)
+
+# Loop over the folds
+for (i in 1:k) {
+  # Define the observation IDs for the i-th fold validation set
+  fold_size = ceiling(nrow(train_data) / k)
+  valid.ID = ((i - 1) * fold_size + 1):(i * fold_size)
+  valid_set = train_data[valid.ID, ]
+  train_set = train_data[-valid.ID, ]
+
+  # Fit models using the training subset (train_set)
+  M01 = glm(Default ~ Checking_amount + Term + Credit_score + Car_loan + Personal_loan + Home_loan + Saving_amount + Age, family = binomial, data = train_set) #Model from backward
+  
+  M02 = glm(Default ~ Age + Saving_amount + Checking_amount + Credit_score + Home_loan + Term + Personal_loan + Education_loan, family = binomial, data = train_set) #Model from forward
+  
+  M03 = glm(Default ~ Checking_amount + Age + Term + Credit_score + Saving_amount, family = binomial, data = train_set) #Model from glm
+
+ M04 = glm(Default ~ Age + Saving_amount + Credit_score + Checking_amount + Education_loan, family = binomial, data = train_set) #Model from backward
+
+  M05 = glm(Default ~ Age + Saving_amount + Checking_amount + Education_loan, family = binomial, data = train_set) #Model from backward
+  
+  M06 = glm(Default ~ Checking_amount + Credit_score + Car_loan + Education_loan + Saving_amount + Age, family = binomial, data = train_set) #Model from backward
+
+  # Predicting Default using the models on the validation set (valid_set)
+  predM01 = predict(M01, newdata = valid_set, type = "response")
+  predM02 = predict(M02, newdata = valid_set, type = "response")
+  predM03 = predict(M03, newdata = valid_set, type = "response")
+  predM04 = predict(M04, newdata = valid_set, type = "response")
+  predM05 = predict(M05, newdata = valid_set, type = "response")
+  predM06 = predict(M06, newdata = valid_set, type = "response")
+
+  
+  # Loop over thresholds to calculate Precision, Recall, and F1-Score
+  for (thresh in thresholds) {
+    # Convert probabilities to binary predictions using the current threshold
+    pred_labels_M01 = ifelse(predM01 > thresh, 1, 0)
+    pred_labels_M02 = ifelse(predM02 > thresh, 1, 0)
+    pred_labels_M03 = ifelse(predM03 > thresh, 1, 0)
+    pred_labels_M04 = ifelse(predM04 > thresh, 1, 0)
+    pred_labels_M05 = ifelse(predM05 > thresh, 1, 0)
+    pred_labels_M06 = ifelse(predM06 > thresh, 1, 0)
+
+    
+    # Calculate confusion matrix for each model
+    cm_M01 = confusionMatrix(factor(pred_labels_M01), factor(valid_set$Default))
+    cm_M02 = confusionMatrix(factor(pred_labels_M02), factor(valid_set$Default))
+    cm_M03 = confusionMatrix(factor(pred_labels_M03), factor(valid_set$Default))
+    cm_M04 = confusionMatrix(factor(pred_labels_M04), factor(valid_set$Default))
+    cm_M05 = confusionMatrix(factor(pred_labels_M05), factor(valid_set$Default))
+    cm_M06 = confusionMatrix(factor(pred_labels_M06), factor(valid_set$Default))
+    
+    # Calculate Precision, Recall, and F1-Score for each model at this threshold
+    precision.m1[i] = cm_M01$byClass['Pos Pred Value']
+    precision.m2[i] = cm_M02$byClass['Pos Pred Value']
+    precision.m3[i] = cm_M03$byClass['Pos Pred Value']
+    precision.m4[i] = cm_M04$byClass['Pos Pred Value']
+    precision.m5[i] = cm_M05$byClass['Pos Pred Value']
+    precision.m6[i] = cm_M06$byClass['Pos Pred Value']
+
+    
+    recall.m1[i] = cm_M01$byClass['Sensitivity']
+    recall.m2[i] = cm_M02$byClass['Sensitivity']
+    recall.m3[i] = cm_M03$byClass['Sensitivity']
+    recall.m4[i] = cm_M04$byClass['Sensitivity']
+    recall.m5[i] = cm_M05$byClass['Sensitivity']
+    recall.m6[i] = cm_M06$byClass['Sensitivity']
+    
+    f1.m1[i] = cm_M01$byClass['F1']
+    f1.m2[i] = cm_M02$byClass['F1']
+    f1.m3[i] = cm_M03$byClass['F1']
+    f1.m4[i] = cm_M04$byClass['F1']
+    f1.m5[i] = cm_M05$byClass['F1']
+    f1.m6[i] = cm_M06$byClass['F1']
+    
+  }
+
+  # Calculate AUC for each model using the validation set
+  roc_M01 = roc(valid_set$Default, predM01)
+  roc_M02 = roc(valid_set$Default, predM02)
+  roc_M03 = roc(valid_set$Default, predM03)
+  roc_M04 = roc(valid_set$Default, predM04)
+  roc_M05 = roc(valid_set$Default, predM05)
+  roc_M06 = roc(valid_set$Default, predM06)
+
+  # Store the AUC values for each fold
+  AUC.m1[i] = auc(roc_M01)
+  AUC.m2[i] = auc(roc_M02)
+  AUC.m3[i] = auc(roc_M03)
+  AUC.m4[i] = auc(roc_M04)
+  AUC.m5[i] = auc(roc_M05)
+  AUC.m6[i] = auc(roc_M06)
+
+}
+
+# Calculate the average AUC, Precision, Recall, and F1-Score for each model across all folds
+mean_AUC_m1 = mean(AUC.m1)
+mean_AUC_m2 = mean(AUC.m2)
+mean_AUC_m3 = mean(AUC.m3)
+mean_AUC_m4 = mean(AUC.m4)
+mean_AUC_m5 = mean(AUC.m5)
+mean_AUC_m6 = mean(AUC.m6)
+
+
+mean_precision_m1 = mean(precision.m1)
+mean_precision_m2 = mean(precision.m2)
+mean_precision_m3 = mean(precision.m3)
+mean_precision_m4 = mean(precision.m4)
+mean_precision_m5 = mean(precision.m5)
+mean_precision_m6 = mean(precision.m6)
+
+mean_recall_m1 = mean(recall.m1)
+mean_recall_m2 = mean(recall.m2)
+mean_recall_m3 = mean(recall.m3)
+mean_recall_m4 = mean(recall.m4)
+mean_recall_m5 = mean(recall.m5)
+mean_recall_m6 = mean(recall.m6)
+
+
+mean_f1_m1 = mean(f1.m1)
+mean_f1_m2 = mean(f1.m2)
+mean_f1_m3 = mean(f1.m3)
+mean_f1_m4 = mean(f1.m4)
+mean_f1_m5 = mean(f1.m5)
+mean_f1_m6 = mean(f1.m6)
+
+# Create a data frame with all the performance metrics
+results_table <- data.frame(
+  Model = paste("Model", 1:6),
+  AUC = c(mean_AUC_m1, mean_AUC_m2, mean_AUC_m3, mean_AUC_m4, mean_AUC_m5, mean_AUC_m6),
+  Precision = c(mean_precision_m1, mean_precision_m2, mean_precision_m3, mean_precision_m4, mean_precision_m5, mean_precision_m6),
+  Recall = c(mean_recall_m1, mean_recall_m2, mean_recall_m3, mean_recall_m4, mean_recall_m5, mean_recall_m6),
+  F1_Score = c(mean_f1_m1, mean_f1_m2, mean_f1_m3, mean_f1_m4, mean_f1_m5, mean_f1_m6)
+)
+
+# Print the results in a table format
+kable(results_table, caption = "Performance Metrics for Each Model")
+
+```
+
+## Finding the Best Parsimonous Final Model by Modelling on Test Data :
+
+The *final model (Model 1)* was evaluated on the test dataset using a **confusion matrix**, which revealed strong performance. The model achieved an **accuracy** of **92.33%**, with a **95% confidence interval** of **(88.72%, 95.08%)**, indicating high reliability. The model demonstrated **sensitivity** (recall) of **94.71%**, correctly identifying most of the actual defaults, and **specificity** of **86.96%**, accurately classifying non-defaults. The **precision** of the model was **94.26%**, indicating a low rate of false positives. The **F1-Score** of **0.945** reflects a good balance between precision and recall, while the **AUC** of **0.983** shows excellent discriminatory power in distinguishing between defaults and non-defaults. The model's **balanced accuracy** was **90.83%**, further confirming its robustness in predicting loan defaults.
+
+```{r}
+
+# Assuming the F1-Scores for the models are stored in variables
+# e.g., mean_f1_m1, mean_f1_m2, ..., mean_f1_m6
+
+# Find the model with the highest F1-Score
+f1_scores <- c(mean_f1_m1, mean_f1_m2, mean_f1_m3, mean_f1_m4, mean_f1_m5, mean_f1_m6)
+best_model_index <- which.max(f1_scores)
+
+# Select the best model based on the highest F1-Score
+if (best_model_index == 1) {
+  model.test = glm(Default ~ Checking_amount + Term + Credit_score + Car_loan + Personal_loan + Home_loan + Saving_amount + Age, 
+                   family = binomial, data = train_set)
+  model_name = "Model 1"
+} else if (best_model_index == 2) {
+  model.test = glm(Default ~ Age + Saving_amount + Checking_amount + Credit_score + Home_loan + Term + Personal_loan + Education_loan, 
+                   family = binomial, data = train_set)
+  model_name = "Model 2"
+} else if (best_model_index == 3) {
+  model.test = glm(Default ~ Checking_amount + Age + Term + Credit_score + Saving_amount, 
+                   family = binomial, data = train_set)
+  model_name = "Model 3"
+} else if (best_model_index == 4) {
+  model.test = glm(Default ~ Age + Saving_amount + Credit_score + Checking_amount + Education_loan, 
+                   family = binomial, data = train_set)
+  model_name = "Model 4"
+} else if (best_model_index == 5) {
+  model.test = glm(Default ~ Age + Saving_amount + Checking_amount + Education_loan, 
+                   family = binomial, data = train_set)
+  model_name = "Model 5"
+} else {
+  model.test = glm(Default ~ Checking_amount + Credit_score + Car_loan + Education_loan + Saving_amount + Age, 
+                   family = binomial, data = train_set)
+  model_name = "Model 6"
+}
+
+# Predicting the test dataset using the selected model
+pred.model.test = predict(model.test, newdata = test_set, type = "response")
+
+# Convert probabilities to binary predictions (using threshold 0.5 for now)
+pred_labels_test = ifelse(pred.model.test > 0.5, 1, 0)
+
+# Calculate Confusion Matrix on the test dataset
+cm_test = confusionMatrix(factor(pred_labels_test), factor(test_set$Default))
+
+# Print Confusion Matrix
+print(paste("Confusion Matrix for the selected model (", model_name, "):", sep = ""))
+print(cm_test)
+
+# Calculate F1-Score on the test dataset
+test_f1 = cm_test$byClass["F1"]
+print(paste("Final Model (", model_name, ") Test F1-Score: = ", round(test_f1, 3), sep = ""))
+
+# Calculate AUC and ROC plot for the test dataset
+roc_curve = roc(test_set$Default, pred.model.test)
+auc_value = auc(roc_curve)
+
+# Print AUC value
+print(paste("Final Model (", model_name, ") Test AUC: = ", round(auc_value, 3), sep = ""))
+
+# Plot ROC curve
+plot(roc_curve, main = paste("ROC Curve for ", model_name), col = "blue", lwd = 2)
+
+# Calculate Precision and Recall on the test dataset
+precision_test = cm_test$byClass["Pos Pred Value"]
+recall_test = cm_test$byClass["Sensitivity"]
+
+# Print Precision and Recall
+print(paste("Final Model (", model_name, ") Test Precision: = ", round(precision_test, 3), sep = ""))
+print(paste("Final Model (", model_name, ") Test Recall: = ", round(recall_test, 3), sep = ""))
+
+```
+
+## Final Model Metrics on Complete Dataset:
+
+The logistic regression model indicates that higher Checking_amount, Saving_amount, Credit_score, and Term are associated with a lower likelihood of loan default, while Personal_loan1, Home_loan1, and Age have a significant negative impact on the probability of default. Car_loan1 is marginally significant, suggesting a small negative effect on default likelihood. The results highlight the importance of financial factors such as savings, credit score, and loan type in predicting loan defaults, with older borrowers also being less likely to default.
+
+The final model, applied to the complete dataset, was optimized using an F1-Score, with an optimal threshold of 0.35. At this threshold, the model achieved an F1-Score of 0.955, indicating a strong balance between precision and recall. The precision was 0.962, reflecting a high proportion of correctly predicted defaults, while the recall was 0.947, demonstrating the model's effectiveness in identifying actual defaults. The model also exhibited excellent AUC of 0.983, confirming its high discriminatory power in distinguishing between defaults and non-defaults.
+
+```{r}
+
+# Fit the final model (Model 1) on the complete dataset (imp_data)
+M01 <- glm(Default ~ Checking_amount + Term + Credit_score + Car_loan + Personal_loan + Home_loan + Saving_amount + Age, 
+            family = binomial, data = imp_data)
+
+print(summary(M01))
+
+# Predict probabilities for the complete dataset
+pred_probs <- predict(M01, newdata = imp_data, type = "response")
+
+# Define a range of thresholds to evaluate
+thresholds <- seq(0.1, 0.9, by = 0.05)
+
+# Initialize a vector to store F1-Scores for each threshold
+f1_scores <- numeric(length(thresholds))
+
+# Loop over thresholds to calculate F1-Score at each threshold
+for (i in 1:length(thresholds)) {
+  threshold <- thresholds[i]
+  
+  # Convert probabilities to binary predictions based on threshold
+  pred_labels <- ifelse(pred_probs > threshold, 1, 0)
+  
+  # Calculate confusion matrix for the current threshold
+  cm <- confusionMatrix(factor(pred_labels), factor(imp_data$Default))
+  
+  # Extract F1-Score from the confusion matrix
+  f1_scores[i] <- cm$byClass["F1"]
+}
+
+# Find the threshold that gives the highest F1-Score
+optimal_threshold_index <- which.max(f1_scores)
+optimal_threshold <- thresholds[optimal_threshold_index]
+
+# Print the optimal threshold based on F1-Score
+cat("Optimal Threshold based on F1-Score: ", optimal_threshold, "\n")
+
+# Now, predict using the optimal threshold
+pred_labels_optimal <- ifelse(pred_probs > optimal_threshold, 1, 0)
+
+# Calculate and print the final F1-Score, Precision, Recall, and AUC at the optimal threshold
+cm_optimal <- confusionMatrix(factor(pred_labels_optimal), factor(imp_data$Default))
+test_f1 <- cm_optimal$byClass["F1"]
+precision_optimal <- cm_optimal$byClass["Pos Pred Value"]
+recall_optimal <- cm_optimal$byClass["Sensitivity"]
+
+# AUC
+roc_curve_optimal <- roc(imp_data$Default, pred_probs)
+auc_value_optimal <- auc(roc_curve_optimal)
+
+# Print final metrics
+cat("Optimal Model Test F1-Score: ", round(test_f1, 3), "\n")
+cat("Optimal Model Test Precision: ", round(precision_optimal, 3), "\n")
+cat("Optimal Model Test Recall: ", round(recall_optimal, 3), "\n")
+cat("Optimal Model Test AUC: ", round(auc_value_optimal, 3), "\n")
+
+# Plot the ROC curve for the optimal threshold
+plot(roc_curve_optimal, main = "ROC Curve for Optimal Threshold", col = "blue", lwd = 2)
+
+
+```
+
+### Recommendations:
+
+Model Deployment:
+Given the performance of Model 1, it is recommended to deploy this model in a production environment for predicting loan defaults. The model’s high AUC, F1-Score, and Precision make it reliable for real-world applications, where the cost of mis-classifying a defaulted loan is high.
+
+Risk Mitigation:
+The high Recall of 94.71% suggests that Model 1 is effective at identifying most of the loans that are likely to default. This can be used to prioritize high-risk loans for closer scrutiny, improving the bank’s or financial institution's ability to mitigate risks. The model can be particularly useful in identifying customers who may require more attention, such as offering them customized repayment plans.
+
+Threshold Adjustment:
+It’s recommended to continually evaluate and adjust the decision threshold based on the financial institution's risk appetite. While the optimal threshold of 0.35 is suitable for balancing Precision and Recall, it may be adjusted in the future depending on business needs. For example, if the institution wants to minimize false positives (i.e., rejecting loans that do not default), the threshold can be increased. Conversely, if minimizing missed defaults is a higher priority, the threshold may be decreased.
+
+Model Monitoring and Updating:
+While Model 1 performs well, it is important to monitor its performance over time, as patterns of loan defaults may change with evolving economic conditions or borrower behaviors. Periodic model retraining using new data will ensure that the model remains relevant and continues to perform well in predicting loan defaults.
+
+Consider Other Features:
+As the model's performance is based on a set of predefined features, it may be worth exploring additional features (such as external economic factors or borrower transaction history) to further improve prediction accuracy. Additional feature engineering and testing can be done to enhance the model’s robustness.
+
+
